@@ -5,10 +5,10 @@
 \section{Optimization Methods and Numerical Solvers}
 \label{sec:methods}
 
-To solve the Economic Dispatch (ED) and DC Optimal Power Flow (DC-OPF) convex quadratic programs, we implemented two independent, exact numerical solvers using pure NumPy without relying on external QP optimization packages:
+To solve the Economic Dispatch (ED) and DC Optimal Power Flow (DC-OPF) convex quadratic programs, we implemented two independent, exact numerical solvers. The iterations of both solvers use only NumPy without relying on external QP optimization packages. The only use of \texttt{scipy.optimize.linprog} is inside \texttt{feasible\_start()} purely to find a feasible starting point when the economic-dispatch candidate violates a line limit:
 \begin{enumerate}
-    \item \textbf{Lambda-Iteration (Bisection) Solver} for Economic Dispatch (\texttt{src/opf/lambda\_iteration.py}).
-    \item \textbf{Primal Active-Set Quadratic Programming Solver} (Nocedal and Wright, Algorithm 16.3) for both ED and network-constrained DC-OPF (\texttt{src/opf/active\_set.py}).
+    \item \textbf{Lambda-Iteration (Bisection) Solver} for Economic Dispatch (\path{src/opf/lambda_iteration.py}).
+    \item \textbf{Primal Active-Set Quadratic Programming Solver} (Nocedal and Wright, Algorithm 16.3) for both ED and network-constrained DC-OPF (\path{src/opf/active_set.py}).
 \end{enumerate}
 
 \subsection{Economic Dispatch via Lambda-Iteration}
@@ -24,7 +24,10 @@ where $c_i > 0$ ensures strict convexity.
 
 Under the project sign convention, the Lagrangian function is defined as:
 \begin{equation}
-    \mathcal{L}(P, \lambda, \mu^+, \mu^-) = \sum_{i=1}^n (c_i P_i^2 + b_i P_i) - \lambda \left(\sum_{i=1}^n P_i - D\right) + \sum_{i=1}^n \mu_i^+ (P_i - P_i^{\max}) + \sum_{i=1}^n \mu_i^- (P_i^{\min} - P_i)
+\begin{split}
+    \mathcal{L}(P, \lambda, \mu^+, \mu^-) = \; & \sum_{i=1}^n (c_i P_i^2 + b_i P_i) - \lambda \left(\sum_{i=1}^n P_i - D\right) \\
+    & + \sum_{i=1}^n \mu_i^+ (P_i - P_i^{\max}) + \sum_{i=1}^n \mu_i^- (P_i^{\min} - P_i)
+\end{split}
 \end{equation}
 with dual multipliers $\mu_i^+ \ge 0$ and $\mu_i^- \ge 0$.
 
@@ -77,8 +80,6 @@ where $P_{\text{total}}(\lambda_{\min}) = \sum P_i^{\min}$ and $P_{\text{total}}
     |\lambda_{\text{high}}^{(k)} - \lambda_{\text{low}}^{(k)}| = \frac{1}{2^k} |\lambda_{\max} - \lambda_{\min}|
 \end{equation}
 Iteration terminates when the power balance residual satisfies $|P_{\text{total}}(\lambda_k) - D| \le \text{tol}$.
-
----
 
 \subsection{Primal Active-Set Quadratic Programming Solver}
 
@@ -136,7 +137,7 @@ The $-A_{eq}^T$ block ensures that the equality multiplier $\lambda$ matches the
 \subsubsection{Algorithmic Flow (Algorithm 16.3)}
 \begin{enumerate}
     \item \textbf{Initialization and Rank Verification:}
-    Start from a primal feasible point $x_0$ (obtained via \texttt{feasible\_start()}). Active inequality constraints ($|a_i^T x_0 - b_i| \le \text{tol}$) are added to $\mathcal{W}_0$ one by one \textit{if and only if} they increase the row rank of $\begin{bmatrix} A_{eq} \\ A_{\mathcal{W}} \end{bmatrix}$. This prevents Linear Independence Constraint Qualification (LICQ) breakdown and singularity in system (\ref{eq:kkt_system}).
+    Start from a primal feasible point $x_0$ (obtained via \texttt{feasible\_start()}, which uses \texttt{scipy.optimize.linprog} strictly if the unconstrained ED candidate violates line limits). The active-set iterations themselves use only NumPy. Active inequality constraints ($|a_i^T x_0 - b_i| \le \text{tol}$) are added to $\mathcal{W}_0$ one by one \textit{if and only if} they increase the row rank of $\begin{bmatrix} A_{eq} \\ A_{\mathcal{W}} \end{bmatrix}$. This prevents Linear Independence Constraint Qualification (LICQ) breakdown and singularity in system (\ref{eq:kkt_system}).
 
     \item \textbf{Step Evaluation ($p_k \approx 0$):}
     If $\|p_k\|_\infty \le \text{tol}$, $x_k$ is the exact minimizer on the current working subspace.
@@ -150,16 +151,15 @@ The $-A_{eq}^T$ block ensures that the equality multiplier $\lambda$ matches the
     \end{itemize}
 
     \item \textbf{Ratio Test and Line Search ($p_k \neq 0$):}
-    If $p_k \neq 0$, compute the maximum step length $\alpha_k \in (0, 1]$ that preserves primal feasibility across all inactive constraints ($i \notin \mathcal{W}_k$):
+    If $p_k \neq 0$, compute the maximum step length $\alpha_k \in [0, 1]$ that preserves primal feasibility across all inactive constraints ($i \notin \mathcal{W}_k$):
     \begin{equation}
         \alpha_k = \min \left( 1, \quad \min_{i \notin \mathcal{W}_k, \; a_i^T p_k > 0} \frac{b_i - a_i^T x_k}{a_i^T p_k} \right)
     \end{equation}
-    Update $x_{k+1} = x_k + \alpha_k p_k$. If $\alpha_k < 1$, the step hit a boundary; add the blocking constraint (breaking ties by lowest index) to $\mathcal{W}_{k+1}$.
+    Update $x_{k+1} = x_k + \alpha_k p_k$. If $\alpha_k < 1$, the step hit a boundary; add the blocking constraint (breaking ties by lowest index) to $\mathcal{W}_{k+1}$. A zero-length step ($\alpha_k = 0$) can occur when the iterate is at a vertex; the blocking constraint is still added to the working set.
 \end{enumerate}
 
 \subsubsection{Convergence and Numerical Properties}
-Because the objective $q(x)$ is strictly decreasing at every nonzero step ($\alpha_k > 0$), and because there are only finitely many subsets $\mathcal{W} \subseteq \{1, \dots, m_{in}\}$, the algorithm terminates in a finite number of iterations in the absence of cycling.
-
+Because the objective $q(x)$ is strictly decreasing at every nonzero step ($\alpha_k > 0$), and because there are only finitely many subsets $\mathcal{W} \subseteq \{1, \dots, m_{in}\}$, the algorithm terminates in a finite number of iterations in the absence of cycling. From the default \texttt{feasible\_start()} point the uncongested base case converges in one iteration, because that point is already the optimum; from a non-optimal \texttt{linprog} start it takes 13 iterations for the base case and 14 iterations for the congested case (rating $\times 0.75$).
 
 \subsection{Economic Interpretation of Multipliers and Sensitivity Analysis}
 \label{sec:lmp_sensitivity}
@@ -181,6 +181,6 @@ When evaluating a finite perturbation $\Delta d_k = 1.0\text{ MW}$, the change i
     \begin{equation}
         q^*(d + \Delta d) = q^*(d) + \lambda_k \Delta d_k + \frac{1}{2} \left( \sum_{i=1}^n \frac{1}{2 c_i} \right)^{-1} (\Delta d_k)^2 + \mathcal{O}((\Delta d_k)^3)
     \end{equation}
-    For the IEEE 30-bus base case with $\Delta d_k = 1.0\text{ MW}$, the second-order term evaluates to $\frac{1}{2} (0.006192)(1.0)^2 = +0.003096\text{ \$}$, perfectly accounting for the observed difference between the finite difference ($\Delta q^* = 3.792292\text{ \$}$) and the local derivative ($\lambda_k = 3.789196\text{ \$/MWh}$).
-    \item \textbf{Active-Set Transitions:} If a finite perturbation causes a transmission line to hit its rating or a generator to hit its maximum capacity, the binding constraint enters the working set $\mathcal{W}$, causing a piecewise kink where the marginal price jumps discontinuously.
+    For the IEEE 30-bus base case with $\Delta d_k = 1.0\text{ MW}$, the second-order term evaluates to $\frac{1}{2} (0.006191)(1.0)^2 = +0.003096\text{ \$}$, perfectly accounting for the observed difference between the finite difference ($\Delta q^* = 3.792292\text{ \$}$) and the local derivative ($\lambda_k = 3.789196\text{ \$/MWh}$).
+    \item \textbf{Active-Set Transitions:} When a generator or line limit becomes binding, the marginal price stays continuous but the slope of the price-demand curve changes (a kink), because the active set changes.
 \end{enumerate}

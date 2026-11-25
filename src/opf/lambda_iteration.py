@@ -230,3 +230,30 @@ def solve_lambda_iteration(
         iters=iters,
         history=history,
     )
+
+
+def solve(
+    qp: QP,
+    x0: np.ndarray | None = None,
+    tol: float = 1e-8,
+    max_iter: int = 100,
+) -> QPResult:
+    """Solve Economic Dispatch QP matching the shared interface in src/opf/qp.py.
+
+    Note:
+        x0 is accepted for interface compatibility but ignored. The bisection
+        method on marginal cost lambda operates on the physical interval
+        [min MC_min, max MC_max] and does not require an initial primal point.
+
+    Args:
+        qp: QP problem specification created by build_ed().
+        x0: Optional initial point (ignored by bisection).
+        tol: Power balance residual convergence tolerance (default 1e-8).
+        max_iter: Maximum bisection iterations (default 100).
+
+    Returns:
+        QPResult instance containing optimal dispatch, objective cost,
+        balance multiplier lambda, inequality multipliers mu, status, and stats.
+    """
+    return solve_lambda_iteration(qp, tol=tol, max_iter=max_iter)
+

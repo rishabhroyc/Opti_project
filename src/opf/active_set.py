@@ -5,7 +5,9 @@ Workstream: Solvers
 
 Implements:
     Nocedal and Wright, Algorithm 16.3 (Primal Active-Set Method for Convex QP).
-    Uses pure NumPy (no external QP solvers, optimizers, or matrix perturbations).
+    The iterations use only NumPy, but when x0 is None, solve() calls
+    feasible_start() from models.py, which may use scipy.optimize.linprog
+    purely to find a feasible starting point.
 
 Mathematical Formulation:
     minimize    q(x) = 1/2 * x^T @ H @ x + g^T @ x
@@ -206,16 +208,23 @@ def solve(
     Maintains primal feasibility x_k at every iteration while identifying the optimal
     active working set W*.
 
+    Note on feasibility:
+        A user-supplied infeasible x0 raises ValueError, while a problem with no
+        feasible point (x0=None) returns status "infeasible".
+
     Args:
         qp: QP problem specification.
         x0: Optional initial feasible point. If None, feasible_start(qp) is used.
         tol: Numerical tolerance for convergence, feasibility, and active sets (default 1e-8).
-        max_iter: Maximum number of active-set iterations (default 500).
+        max_iter: Maximum number of active-set iterations (default 500, must be >= 1).
 
     Returns:
         QPResult containing primal solution, objective value, equality multipliers lam,
         full inequality multipliers mu (in original row order), status, and history.
     """
+    if max_iter < 1:
+        raise ValueError(f"max_iter must be at least 1, got {max_iter}")
+
     # 1. Validate inputs and extract symmetrized problem matrices
     H, g = _validate_qp(qp)
     n = H.shape[0]
@@ -289,6 +298,8 @@ def solve(
                 for idx, constr_i in enumerate(working_set):
                     full_mu[constr_i] = max(0.0, float(mu_w[idx]))
 
+                # For DC-OPF, lam has 31 entries; lam[:30] are the bus LMPs and
+                # lam[30] is the multiplier of the theta_ref = 0 row (about 0, not a price).
                 return QPResult(
                     x=x,
                     obj=current_obj,
@@ -348,6 +359,8 @@ def solve(
     else:
         lam_final = np.array([], dtype=np.float64)
 
+    # For DC-OPF, lam has 31 entries; lam[:30] are the bus LMPs and
+    # lam[30] is the multiplier of the theta_ref = 0 row (about 0, not a price).
     return QPResult(
         x=x,
         obj=final_obj,

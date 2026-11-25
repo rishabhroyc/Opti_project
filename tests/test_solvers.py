@@ -8,9 +8,10 @@ import numpy as np
 import pytest
 
 from src.opf.qp import QP
-from src.opf.lambda_iteration import solve_lambda_iteration, solve_lambda_iteration_raw
+from src.opf.lambda_iteration import solve as solve_lambda, solve_lambda_iteration, solve_lambda_iteration_raw
 from src.opf.active_set import solve as solve_active_set
 from src.opf.models import load_case, build_ed, build_dcopf, feasible_start
+from scipy.optimize import linprog
 
 
 # =====================================================================
@@ -876,8 +877,8 @@ def test_dcopf_lmp_economic_interpretation_sensitivity():
            - First-order approximation: Delta_Cost ~= lambda_2 * Delta_d (agrees within < 0.1%).
            - Second-order Taylor series:
              Cost(d + Delta_d) = Cost(d) + lambda * Delta_d + 0.5 * (d_lambda / d_D) * (Delta_d)^2
-             Since d_lambda / d_D = 1 / sum(1 / (2*c_i)) = 0.006192 $/MWh^2,
-             the curvature term 0.5 * 0.006192 * (1.0)^2 = +0.003096 $ explains the exact
+             Since d_lambda / d_D = 1 / sum(1 / (2*c_i)) = 0.006191 $/MWh^2,
+             the curvature term 0.5 * 0.006191 * (1.0)^2 = +0.003096 $ explains the exact
              difference between the finite difference and the point derivative.
         5. Active-set remains unchanged (no lines congested, all generators within bounds).
     """
@@ -914,3 +915,93 @@ def test_dcopf_lmp_economic_interpretation_sensitivity():
 
     # 3. Verify no line or generator limits were triggered by the 1 MW increment
     assert np.all(res_perturbed.mu == 0.0)
+
+
+
+def test_lambda_iteration_shared_solve_interface():
+    """Verify solve() wrapper in lambda_iteration.py matches solve_lambda_iteration()."""
+    case = load_case("data/case30.m")
+    qp = build_ed(case, load_scale=1.0)
+
+    res_shared = solve_lambda(qp)
+    res_direct = solve_lambda_iteration(qp)
+
+    assert res_shared.status == "optimal"
+    assert res_direct.status == "optimal"
+    assert pytest.approx(res_shared.obj, abs=1e-8) == res_direct.obj
+    np.testing.assert_allclose(res_shared.x, res_direct.x, atol=1e-8)
+    np.testing.assert_allclose(res_shared.lam, res_direct.lam, atol=1e-8)
+
+
+def test_active_set_non_optimal_linprog_start(capsys):
+    """Verify active-set solver does real work from a non-optimal feasible starting point.
+
+    Computes a non-optimal starting point using linprog with linear objective c = -qp.g
+    for both rate_scale=1.0 and rate_scale=0.75.
+    Asserts:
+        - status == 'optimal'
+        - cost matches benchmark within 0.005 (565.21 for 1.0, 565.97 for 0.75)
+        - iters > 5 (performs multi-step working set additions and drops)
+        - history[0] > history[-1] (objective strictly decreases)
+    Prints iteration counts.
+    """
+    case = load_case("data/case30.m")
+
+    # 1. Base case (rate_scale=1.0)
+    qp_base = build_dcopf(case, load_scale=1.0, rate_scale=1.0)
+    res_lp_base = linprog(
+        c=-qp_base.g,
+        A_ub=qp_base.A_in,
+        b_ub=qp_base.b_in,
+        A_eq=qp_base.A_eq,
+        b_eq=qp_base.b_eq,
+        bounds=(None, None),
+        method="highs",
+    )
+    assert res_lp_base.success, "linprog failed to find feasible start"
+    x0_base = res_lp_base.x
+
+    res_base = solve_active_set(qp_base, x0=x0_base)
+    assert res_base.status == "optimal"
+    assert pytest.approx(res_base.obj, abs=0.005) == 565.21
+    assert res_base.iters > 5
+    assert res_base.history[0] > res_base.history[-1]
+    print(f"\n[Non-optimal start] Base case (rate_scale=1.0) completed in {res_base.iters} iterations (initial cost: {res_base.history[0]:.2f}, final cost: {res_base.obj:.2f})")
+
+    # 2. Congested case (rate_scale=0.75)
+    qp_75 = build_dcopf(case, load_scale=1.0, rate_scale=0.75)
+    res_lp_75 = linprog(
+        c=-qp_75.g,
+        A_ub=qp_75.A_in,
+        b_ub=qp_75.b_in,
+        A_eq=qp_75.A_eq,
+        b_eq=qp_75.b_eq,
+        bounds=(None, None),
+        method="highs",
+    )
+    assert res_lp_75.success, "linprog failed to find feasible start"
+    x0_75 = res_lp_75.x
+
+    res_75 = solve_active_set(qp_75, x0=x0_75)
+    assert res_75.status == "optimal"
+    assert pytest.approx(res_75.obj, abs=0.005) == 565.97
+    assert res_75.iters > 5
+    assert res_75.history[0] > res_75.history[-1]
+    print(f"[Non-optimal start] Congested case (rate_scale=0.75) completed in {res_75.iters} iterations (initial cost: {res_75.history[0]:.2f}, final cost: {res_75.obj:.2f})")
+
+
+def test_active_set_max_iter_zero_raises_error():
+    """Verify that max_iter < 1 raises ValueError."""
+    H = np.eye(2, dtype=np.float64)
+    g = np.zeros(2, dtype=np.float64)
+    qp = QP(
+        H=H,
+        g=g,
+        A_eq=np.zeros((0, 2)),
+        b_eq=np.zeros(0),
+        A_in=np.zeros((0, 2)),
+        b_in=np.zeros(0),
+        names=["x1", "x2"],
+    )
+    with pytest.raises(ValueError, match="max_iter must be at least 1"):
+        solve_active_set(qp, x0=np.array([0.0, 0.0]), max_iter=0)
