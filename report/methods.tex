@@ -1,0 +1,186 @@
+% methods.tex: Optimization Methods and Algorithms
+% Author: Varshith Tadiparthi (Albert and Einstein)
+% Workstream: Solvers (Economic Dispatch & Primal Active-Set QP)
+
+\section{Optimization Methods and Numerical Solvers}
+\label{sec:methods}
+
+To solve the Economic Dispatch (ED) and DC Optimal Power Flow (DC-OPF) convex quadratic programs, we implemented two independent, exact numerical solvers using pure NumPy without relying on external QP optimization packages:
+\begin{enumerate}
+    \item \textbf{Lambda-Iteration (Bisection) Solver} for Economic Dispatch (\texttt{src/opf/lambda\_iteration.py}).
+    \item \textbf{Primal Active-Set Quadratic Programming Solver} (Nocedal and Wright, Algorithm 16.3) for both ED and network-constrained DC-OPF (\texttt{src/opf/active\_set.py}).
+\end{enumerate}
+
+\subsection{Economic Dispatch via Lambda-Iteration}
+
+\subsubsection{KKT Optimality and Decoupled Dispatch}
+The classical Economic Dispatch problem minimizes the total generator operating cost subject to power balance and capacity limits:
+\begin{align}
+    \min_{\{P_i\}} \quad & \sum_{i=1}^n \left( c_i P_i^2 + b_i P_i \right) \label{eq:ed_obj} \\
+    \text{subject to} \quad & \sum_{i=1}^n P_i = D \quad (\lambda) \label{eq:ed_bal} \\
+    & P_i^{\min} \le P_i \le P_i^{\max}, \quad \forall i = 1, \dots, n \label{eq:ed_bounds}
+\end{align}
+where $c_i > 0$ ensures strict convexity.
+
+Under the project sign convention, the Lagrangian function is defined as:
+\begin{equation}
+    \mathcal{L}(P, \lambda, \mu^+, \mu^-) = \sum_{i=1}^n (c_i P_i^2 + b_i P_i) - \lambda \left(\sum_{i=1}^n P_i - D\right) + \sum_{i=1}^n \mu_i^+ (P_i - P_i^{\max}) + \sum_{i=1}^n \mu_i^- (P_i^{\min} - P_i)
+\end{equation}
+with dual multipliers $\mu_i^+ \ge 0$ and $\mu_i^- \ge 0$.
+
+The Karush-Kuhn-Tucker (KKT) first-order optimality conditions are:
+\begin{enumerate}
+    \item \textbf{Stationarity:}
+    \begin{equation}
+        \frac{\partial \mathcal{L}}{\partial P_i} = 2 c_i P_i + b_i - \lambda + \mu_i^+ - \mu_i^- = 0 \implies 2 c_i P_i + b_i = \lambda - \mu_i^+ + \mu_i^-
+    \end{equation}
+    \item \textbf{Primal Feasibility:} Constraints (\ref{eq:ed_bal}) and (\ref{eq:ed_bounds}) hold.
+    \item \textbf{Dual Feasibility:} $\mu_i^+ \ge 0, \; \mu_i^- \ge 0$.
+    \item \textbf{Complementary Slackness:}
+    \begin{equation}
+        \mu_i^+ (P_i - P_i^{\max}) = 0, \quad \mu_i^- (P_i^{\min} - P_i) = 0
+    \end{equation}
+\end{enumerate}
+
+From complementary slackness, for any trial system marginal price $\lambda$:
+\begin{itemize}
+    \item If $P_i^{\min} < P_i < P_i^{\max}$, then $\mu_i^+ = \mu_i^- = 0$, yielding the \textit{equal incremental cost rule}:
+    \begin{equation}
+        \text{IC}_i(P_i) = 2 c_i P_i + b_i = \lambda \implies P_i(\lambda) = \frac{\lambda - b_i}{2 c_i}
+    \end{equation}
+    \item If $P_i = P_i^{\max}$, then $\mu_i^- = 0$ and $\mu_i^+ = \lambda - (2 c_i P_i^{\max} + b_i) \ge 0 \implies \lambda \ge 2 c_i P_i^{\max} + b_i$.
+    \item If $P_i = P_i^{\min}$, then $\mu_i^+ = 0$ and $\mu_i^- = (2 c_i P_i^{\min} + b_i) - \lambda \ge 0 \implies \lambda \le 2 c_i P_i^{\min} + b_i$.
+\end{itemize}
+
+Combining all three regimes yields the exact closed-form decoupled generator response:
+\begin{equation}
+    P_i(\lambda) = \operatorname{clip}\left( \frac{\lambda - b_i}{2 c_i}, \; P_i^{\min}, \; P_i^{\max} \right)
+\end{equation}
+
+\subsubsection{Monotonicity, Bracketing, and Bisection Algorithm}
+Since $c_i > 0$, each individual generator characteristic $P_i(\lambda)$ is continuous and monotonically non-decreasing in $\lambda$. Consequently, the total power output function:
+\begin{equation}
+    P_{\text{total}}(\lambda) = \sum_{i=1}^n P_i(\lambda)
+\end{equation}
+is also continuous and monotonically non-decreasing.
+
+The root-finding problem $h(\lambda) = P_{\text{total}}(\lambda) - D = 0$ is bounded by natural physical brackets:
+\begin{equation}
+    \lambda_{\min} = \min_{1 \le i \le n} \left( b_i + 2 c_i P_i^{\min} \right), \quad \lambda_{\max} = \max_{1 \le i \le n} \left( b_i + 2 c_i P_i^{\max} \right)
+\end{equation}
+where $P_{\text{total}}(\lambda_{\min}) = \sum P_i^{\min}$ and $P_{\text{total}}(\lambda_{\max}) = \sum P_i^{\max}$.
+
+\paragraph{Infeasibility Criterion:} If $D < \sum P_i^{\min} - \epsilon$ or $D > \sum P_i^{\max} + \epsilon$, no feasible generation schedule exists; the solver immediately returns status \texttt{"infeasible"}.
+
+\paragraph{Convergence:} At each iteration $k$, the midpoint $\lambda_k = \frac{1}{2}(\lambda_{\text{low}} + \lambda_{\text{high}})$ is evaluated. The interval width contracts geometrically:
+\begin{equation}
+    |\lambda_{\text{high}}^{(k)} - \lambda_{\text{low}}^{(k)}| = \frac{1}{2^k} |\lambda_{\max} - \lambda_{\min}|
+\end{equation}
+Iteration terminates when the power balance residual satisfies $|P_{\text{total}}(\lambda_k) - D| \le \text{tol}$.
+
+---
+
+\subsection{Primal Active-Set Quadratic Programming Solver}
+
+For problems with general linear inequality constraints (such as line flow ratings in DC-OPF), decoupling is not possible. We implemented the Primal Active-Set Method following Nocedal and Wright (Algorithm 16.3).
+
+\subsubsection{Standard QP Formulation}
+The general convex QP is expressed as:
+\begin{align}
+    \min_{x \in \mathbb{R}^n} \quad & q(x) = \frac{1}{2} x^T H x + g^T x \\
+    \text{subject to} \quad & A_{eq} x = b_{eq} \\
+    & A_{in} x \le b_{in}
+\end{align}
+
+\subsubsection{Working Set and KKT Equality Subproblem}
+At iteration $k$ with feasible iterate $x_k$, let $\mathcal{W}_k \subseteq \{1, \dots, m_{in}\}$ denote the \textit{working set} of active inequality constraints treated as equalities ($A_{in}[\mathcal{W}_k] x_k = b_{in}[\mathcal{W}_k]$).
+
+To compute a step $p_k = x_{k+1} - x_k$ that minimizes $q(x_k + p)$ on the working manifold, we solve the equality-constrained subproblem:
+\begin{align}
+    \min_{p} \quad & \frac{1}{2} p^T H p + g_k^T p \\
+    \text{subject to} \quad & A_{eq} p = 0 \\
+    & A_{\mathcal{W}} p = 0
+\end{align}
+where $g_k = \nabla q(x_k) = H x_k + g$, and $A_{\mathcal{W}} = A_{in}[\mathcal{W}_k, :]$.
+
+Under our project's Lagrangian convention:
+\begin{equation}
+    \mathcal{L}(x, \lambda, \mu) = \frac{1}{2} x^T H x + g^T x - \lambda^T (A_{eq} x - b_{eq}) + \mu^T (A_{in} x - b_{in})
+\end{equation}
+stationarity at the subproblem solution requires:
+\begin{equation}
+    H p + g_k - A_{eq}^T \lambda + A_{\mathcal{W}}^T \mu_{\mathcal{W}} = 0 \implies H p - A_{eq}^T \lambda + A_{\mathcal{W}}^T \mu_{\mathcal{W}} = -g_k
+\end{equation}
+Assembling the full Karush-Kuhn-Tucker system into block matrix form:
+\begin{equation}
+    \begin{bmatrix}
+        H & -A_{eq}^T & A_{\mathcal{W}}^T \\
+        A_{eq} & 0 & 0 \\
+        A_{\mathcal{W}} & 0 & 0
+    \end{bmatrix}
+    \begin{bmatrix}
+        p \\
+        \lambda \\
+        \mu_{\mathcal{W}}
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        -g_k \\
+        0 \\
+        0
+    \end{bmatrix}
+    \label{eq:kkt_system}
+\end{equation}
+The $-A_{eq}^T$ block ensures that the equality multiplier $\lambda$ matches the economic definition of Locational Marginal Prices ($\lambda > 0$), while $+A_{\mathcal{W}}^T$ directly computes non-negative dual variables $\mu_{\mathcal{W}} \ge 0$ for active inequality constraints.
+
+\subsubsection{Algorithmic Flow (Algorithm 16.3)}
+\begin{enumerate}
+    \item \textbf{Initialization and Rank Verification:}
+    Start from a primal feasible point $x_0$ (obtained via \texttt{feasible\_start()}). Active inequality constraints ($|a_i^T x_0 - b_i| \le \text{tol}$) are added to $\mathcal{W}_0$ one by one \textit{if and only if} they increase the row rank of $\begin{bmatrix} A_{eq} \\ A_{\mathcal{W}} \end{bmatrix}$. This prevents Linear Independence Constraint Qualification (LICQ) breakdown and singularity in system (\ref{eq:kkt_system}).
+
+    \item \textbf{Step Evaluation ($p_k \approx 0$):}
+    If $\|p_k\|_\infty \le \text{tol}$, $x_k$ is the exact minimizer on the current working subspace.
+    \begin{itemize}
+        \item If $\mu_i \ge -\text{tol}$ for all $i \in \mathcal{W}_k$, all KKT conditions are satisfied. \textbf{Declare optimality.}
+        \item Otherwise, identify the constraint with the most negative multiplier:
+        \begin{equation}
+            j = \arg\min_{i \in \mathcal{W}_k} \mu_i
+        \end{equation}
+        Remove constraint $j$ from $\mathcal{W}_k$ and re-solve on the relaxed subspace without moving $x_k$.
+    \end{itemize}
+
+    \item \textbf{Ratio Test and Line Search ($p_k \neq 0$):}
+    If $p_k \neq 0$, compute the maximum step length $\alpha_k \in (0, 1]$ that preserves primal feasibility across all inactive constraints ($i \notin \mathcal{W}_k$):
+    \begin{equation}
+        \alpha_k = \min \left( 1, \quad \min_{i \notin \mathcal{W}_k, \; a_i^T p_k > 0} \frac{b_i - a_i^T x_k}{a_i^T p_k} \right)
+    \end{equation}
+    Update $x_{k+1} = x_k + \alpha_k p_k$. If $\alpha_k < 1$, the step hit a boundary; add the blocking constraint (breaking ties by lowest index) to $\mathcal{W}_{k+1}$.
+\end{enumerate}
+
+\subsubsection{Convergence and Numerical Properties}
+Because the objective $q(x)$ is strictly decreasing at every nonzero step ($\alpha_k > 0$), and because there are only finitely many subsets $\mathcal{W} \subseteq \{1, \dots, m_{in}\}$, the algorithm terminates in a finite number of iterations in the absence of cycling.
+
+
+\subsection{Economic Interpretation of Multipliers and Sensitivity Analysis}
+\label{sec:lmp_sensitivity}
+
+By the sensitivity theorem of nonlinear programming (Envelope Theorem), the optimal objective value function $q^*(b_{eq})$ satisfies:
+\begin{equation}
+    \nabla_{b_{eq}} q^*(b_{eq}) = \lambda
+\end{equation}
+For bus $k$, the equality constraint is the real power balance row:
+\begin{equation}
+    \sum_{i \text{ at } k} P_i - \sum_{l} f_{kl} = d_k \implies \frac{\partial q^*}{\partial d_k} = \lambda_k
+\end{equation}
+Thus, the dual multiplier $\lambda_k$ represents the exact marginal cost of supplying an incremental megawatt of power at bus $k$---the Locational Marginal Price (LMP).
+
+\paragraph{Finite-Difference vs. Point Derivative:}
+When evaluating a finite perturbation $\Delta d_k = 1.0\text{ MW}$, the change in optimal system cost $\Delta q^* = q^*(d + \Delta d) - q^*(d)$ differs from the point derivative $\lambda_k$ due to two effects:
+\begin{enumerate}
+    \item \textbf{Quadratic Cost Curvature:} Even when the optimal active set does not change, the cost function is strictly quadratic. Taylor expanding $q^*(d)$ around $d$:
+    \begin{equation}
+        q^*(d + \Delta d) = q^*(d) + \lambda_k \Delta d_k + \frac{1}{2} \left( \sum_{i=1}^n \frac{1}{2 c_i} \right)^{-1} (\Delta d_k)^2 + \mathcal{O}((\Delta d_k)^3)
+    \end{equation}
+    For the IEEE 30-bus base case with $\Delta d_k = 1.0\text{ MW}$, the second-order term evaluates to $\frac{1}{2} (0.006192)(1.0)^2 = +0.003096\text{ \$}$, perfectly accounting for the observed difference between the finite difference ($\Delta q^* = 3.792292\text{ \$}$) and the local derivative ($\lambda_k = 3.789196\text{ \$/MWh}$).
+    \item \textbf{Active-Set Transitions:} If a finite perturbation causes a transmission line to hit its rating or a generator to hit its maximum capacity, the binding constraint enters the working set $\mathcal{W}$, causing a piecewise kink where the marginal price jumps discontinuously.
+\end{enumerate}
