@@ -6,6 +6,7 @@ Author: Rishabh Roy Choudhury (Albert and Einstein)
 import numpy as np
 import pytest
 from src.opf.models import Case, build_dcopf, build_ed, feasible_start, load_case
+from src.opf.reference import solve as solve_reference
 
 
 def test_load_case_30():
@@ -214,6 +215,64 @@ def test_feasible_start():
     assert x0_ed.shape == (6,)
     assert np.max(np.abs(qp_ed.A_eq @ x0_ed - qp_ed.b_eq)) <= 1e-6
     assert np.all(qp_ed.A_in @ x0_ed <= qp_ed.b_in + 1e-6)
+
+
+def test_reference_solver():
+    """Verify CVXPY + Clarabel reference solver against verified benchmark results.
+
+    Benchmark tolerances: half a unit of the last printed digit.
+    """
+    case = load_case("data/case30.m")
+
+    # 1. ED base case: cost 565.21, lambda 3.7892, mu >= 0
+    qp_ed = build_ed(case, load_scale=1.0)
+    res_ed = solve_reference(qp_ed)
+    assert res_ed.status == "optimal"
+    assert pytest.approx(res_ed.obj, abs=0.005) == 565.21
+    assert len(res_ed.lam) == 1
+    assert pytest.approx(res_ed.lam[0], abs=0.00005) == 3.7892
+    assert np.all(res_ed.mu >= 0.0)
+
+    # 2. DC-OPF base case: cost 565.21, all 30 balance multipliers 3.7892, mu >= 0
+    qp_base = build_dcopf(case, load_scale=1.0, rate_scale=1.0)
+    res_base = solve_reference(qp_base)
+    assert res_base.status == "optimal"
+    assert pytest.approx(res_base.obj, abs=0.005) == 565.21
+    # 30 bus balance multipliers (first 30 elements of lam)
+    bus_lmps_base = res_base.lam[:30]
+    for lmp in bus_lmps_base:
+        assert pytest.approx(lmp, abs=0.00005) == 3.7892
+    assert np.all(res_base.mu >= 0.0)
+
+    # 3. DC-OPF ratings x0.75: cost 565.97, LMPs 3.65 to 7.18, mu >= 0
+    qp_75 = build_dcopf(case, load_scale=1.0, rate_scale=0.75)
+    res_75 = solve_reference(qp_75)
+    assert res_75.status == "optimal"
+    assert pytest.approx(res_75.obj, abs=0.005) == 565.97
+    bus_lmps_75 = res_75.lam[:30]
+    assert pytest.approx(bus_lmps_75.min(), abs=0.005) == 3.65
+    assert pytest.approx(bus_lmps_75.max(), abs=0.005) == 7.18
+    assert np.all(res_75.mu >= 0.0)
+
+    # 4. DC-OPF ratings x0.72: cost 589.58, LMPs 3.02 to 39.65, mu >= 0
+    qp_72 = build_dcopf(case, load_scale=1.0, rate_scale=0.72)
+    res_72 = solve_reference(qp_72)
+    assert res_72.status == "optimal"
+    assert pytest.approx(res_72.obj, abs=0.005) == 589.58
+    bus_lmps_72 = res_72.lam[:30]
+    assert pytest.approx(bus_lmps_72.min(), abs=0.005) == 3.02
+    assert pytest.approx(bus_lmps_72.max(), abs=0.005) == 39.65
+    assert np.all(res_72.mu >= 0.0)
+
+    # 5. DC-OPF ratings x0.71 and x0.70: status == 'infeasible'
+    qp_71 = build_dcopf(case, load_scale=1.0, rate_scale=0.71)
+    res_71 = solve_reference(qp_71)
+    assert res_71.status == "infeasible"
+
+    qp_70 = build_dcopf(case, load_scale=1.0, rate_scale=0.70)
+    res_70 = solve_reference(qp_70)
+    assert res_70.status == "infeasible"
+
 
 
 
