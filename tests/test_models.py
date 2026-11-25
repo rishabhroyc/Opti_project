@@ -5,7 +5,16 @@ Author: Rishabh Roy Choudhury (Albert and Einstein)
 
 import numpy as np
 import pytest
+from src.opf.check import (
+    comparison_table,
+    kkt_residual,
+    kkt_residuals,
+    marginal_cost_check,
+    marginal_costs,
+    print_comparison_table,
+)
 from src.opf.models import Case, build_dcopf, build_ed, feasible_start, load_case
+from src.opf.qp import QPResult
 from src.opf.reference import solve as solve_reference
 
 
@@ -272,6 +281,82 @@ def test_reference_solver():
     qp_70 = build_dcopf(case, load_scale=1.0, rate_scale=0.70)
     res_70 = solve_reference(qp_70)
     assert res_70.status == "infeasible"
+
+
+def test_kkt_residuals_and_perturbation():
+    """Verify KKT residual accuracy on reference solutions and sensitivity to perturbation."""
+    case = load_case("data/case30.m")
+
+    # 1. Reference KKT residual < 1e-6 on base case
+    qp_base = build_dcopf(case, load_scale=1.0, rate_scale=1.0)
+    res_base = solve_reference(qp_base)
+    kkt_base = kkt_residuals(qp_base, res_base)
+    assert kkt_base.stationarity < 1e-6
+    assert kkt_base.primal < 1e-6
+    assert kkt_base.dual < 1e-6
+    assert kkt_base.complementarity < 1e-6
+    assert kkt_residual(qp_base, res_base) < 1e-6
+
+    # 2. Reference KKT residual < 1e-6 on ratings x0.75
+    qp_75 = build_dcopf(case, load_scale=1.0, rate_scale=0.75)
+    res_75 = solve_reference(qp_75)
+    assert kkt_residual(qp_75, res_75) < 1e-6
+
+    # 3. Perturbed solution has a large residual
+    x_perturbed = res_base.x.copy()
+    x_perturbed[0] += 5.0  # Perturb generator 1 by 5 MW
+    res_perturbed = QPResult(
+        x=x_perturbed,
+        obj=res_base.obj,
+        lam=res_base.lam,
+        mu=res_base.mu,
+        status="optimal",
+        iters=res_base.iters,
+        history=res_base.history,
+    )
+    res_bad = kkt_residual(qp_base, res_perturbed)
+    assert res_bad > 0.05, f"Expected large residual for perturbed solution, got {res_bad}"
+
+
+def test_comparison_table_and_marginal_costs():
+    """Verify comparison table formatting and marginal cost verification."""
+    case = load_case("data/case30.m")
+    qp_base = build_dcopf(case, load_scale=1.0, rate_scale=1.0)
+    res_base = solve_reference(qp_base)
+
+    # 1. Marginal costs about 3.7892 for all six generators
+    mc = marginal_costs(case, res_base)
+    assert len(mc) == 6
+    for val in mc:
+        assert pytest.approx(val, abs=1e-4) == 3.7892
+
+    # 2. Marginal cost check (+1 MW demand at bus 1) matches to first order
+    mc_check = marginal_cost_check(qp_base, bus_idx=0)
+    assert mc_check["delta_cost"] > 0
+    assert pytest.approx(mc_check["bus_lambda"], abs=1e-4) == 3.7892
+    assert mc_check["gap"] < 0.01  # Second-order gap from quadratic cost is ~0.0031
+
+    # 3. Table columns right
+    table_data = comparison_table([("Clarabel", res_base)], ref=res_base, qp=qp_base)
+    assert len(table_data) == 1
+    row = table_data[0]
+    expected_keys = {"name", "cost", "max_dx", "max_dlambda", "kkt_residual", "iters", "status"}
+    assert expected_keys.issubset(row.keys())
+    assert row["name"] == "Clarabel"
+    assert pytest.approx(row["cost"], abs=0.01) == 565.21
+    assert row["max_dx"] == 0.0
+    assert row["max_dlambda"] == 0.0
+    assert row["kkt_residual"] < 1e-6
+
+    # Text printer
+    text = print_comparison_table(table_data)
+    assert "Solver" in text
+    assert "Cost" in text
+    assert "Max |dx|" in text
+    assert "Max |dlam|" in text
+    assert "KKT Res" in text
+    assert "Clarabel" in text
+
 
 
 
