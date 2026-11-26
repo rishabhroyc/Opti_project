@@ -43,22 +43,26 @@ def fig1_price_vs_demand() -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(df["demand_mw"], df["lambda"], "o-", markersize=3, linewidth=1.2, label="Marginal Price λ")
 
-    # Mark the kinks where generators reach their P_max
+    # Compute analytical kinks where generators reach their P_max
     from experiments.common import get_case
     case = get_case()
-    for i, pmax in enumerate(case.p_max):
-        col = f"P{i+1}"
-        if col in df.columns:
-            hit = df[df[col].astype(float) >= pmax - 1e-6]
-            if not hit.empty:
-                d_val = float(hit.iloc[0]["demand_mw"])
-                ax.axvline(
-                    d_val,
-                    linestyle=":",
-                    color="gray",
-                    alpha=0.7,
-                    label=f"G{i+1} at max",
-                )
+    d_min = float(df["demand_mw"].min())
+    d_max = float(df["demand_mw"].max())
+
+    colors = ["tab:red", "tab:purple", "tab:brown", "tab:green", "tab:orange", "tab:cyan"]
+    for j in range(len(case.gen_bus)):
+        lam_j = case.b[j] + 2.0 * case.c[j] * case.p_max[j]
+        p_alloc = np.clip((lam_j - case.b) / (2.0 * case.c), case.p_min, case.p_max)
+        D_j = float(np.sum(p_alloc))
+        if d_min <= D_j <= d_max:
+            ax.axvline(
+                D_j,
+                linestyle=":",
+                color=colors[j % len(colors)],
+                alpha=0.85,
+                linewidth=1.4,
+                label=f"G{j + 1} at max ({D_j:.2f} MW)",
+            )
 
     ax.set_xlabel("Total Demand (MW)")
     ax.set_ylabel("System Marginal Price λ ($/MWh)")

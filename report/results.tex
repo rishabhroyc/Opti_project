@@ -14,7 +14,7 @@ Table~\ref{tab:validation} compares our custom solvers (the primal active-set QP
 \input{../results/validation_table.tex}
 \end{table}
 
-Across all scenarios, our active-set solver agrees with the reference solution to high numerical precision. In the uncongested base case and ED problem, the active-set solver achieves primal errors $\max |\Delta x| \le 4.27 \times 10^{-8}$ and dual errors $\max |\Delta \lambda| \le 8.59 \times 10^{-10}$, with KKT stationarity residuals on the order of $10^{-11}$. In the congested scenario (ratings $\times 0.75$), the active-set solver matches the reference solution with primal deviation $\max |\Delta x| = 9.80 \times 10^{-6}$, dual deviation $\max |\Delta \lambda| = 8.86 \times 10^{-6}$, and KKT residual $9.55 \times 10^{-12}$. The lambda-iteration solver solves the ED problem to $\max |\Delta x| = 8.77 \times 10^{-7}$ in 33 bisection iterations.
+Across all scenarios, our active-set solver agrees with the reference solution to high numerical precision. In the uncongested base case, the active-set solver achieves primal error $\max |\Delta x| = 4.27 \times 10^{-8}$ and dual error $\max |\Delta \lambda| = 8.59 \times 10^{-10}$, with a KKT stationarity residual of $2.40 \times 10^{-11}$. On the Economic Dispatch problem, it achieves $\max |\Delta x| = 8.77 \times 10^{-7}$ and $\max |\Delta \lambda| = 4.00 \times 10^{-10}$ with a KKT residual of $2.40 \times 10^{-11}$. In the congested scenario (ratings $\times 0.75$), the active-set solver matches the reference solution with primal deviation $\max |\Delta x| = 9.80 \times 10^{-6}$, dual deviation $\max |\Delta \lambda| = 8.86 \times 10^{-6}$, and KKT residual $9.55 \times 10^{-12}$. The lambda-iteration solver solves the ED problem with $\max |\Delta x| = 8.77 \times 10^{-7}$ and $\max |\Delta \lambda| = 4.31 \times 10^{-10}$ in 33 bisection iterations, with a KKT residual of $5.07 \times 10^{-9}$.
 
 When initialized from the default \texttt{feasible\_start()} point, the base DC-OPF and ED problems converge in a single iteration because the initial point is already the unconstrained global minimizer. To evaluate the active-set solver's ability to perform active-set identification from a distant state, we compute non-optimal feasible starting points via linear programming ($\min -g^T x$). From these non-optimal points, the active-set solver takes 13 iterations on the base case, 14 iterations on the $0.75\times$ congested case, and 11 iterations on ED, systematically adjusting the working set until optimality is proven.
 
@@ -41,11 +41,12 @@ Figure~\ref{fig:price_demand} presents the system marginal price $\lambda$ as to
 
 The marginal price curve exhibits distinct slope discontinuities (kinks) at specific demand thresholds where individual generators reach their maximum output capacity $P_{\max}$ and are clamped:
 \begin{itemize}
-    \item At $D = 260.15\text{ MW}$, Generator 4 reaches its upper limit $P_{\max, 4} = 55.0\text{ MW}$.
-    \item At $D = 288.53\text{ MW}$, Generator 5 reaches $P_{\max, 5} = 30.0\text{ MW}$.
-    \item At $D = 302.72\text{ MW}$, Generator 2 reaches $P_{\max, 2} = 80.0\text{ MW}$.
-    \item At $D = 321.64\text{ MW}$, Generators 1 and 6 hit their respective bounds ($P_{\max, 1} = 80.0\text{ MW}$ and $P_{\max, 6} = 40.0\text{ MW}$).
-    \item Generator 3 never reaches its capacity limit ($P_{\max, 3} = 50.0\text{ MW}$) within this demand range.
+    \item At $D = 250.29\text{ MW}$, Generator 4 reaches its upper limit $P_{\max, 4} = 55.0\text{ MW}$.
+    \item At $D = 284.07\text{ MW}$, Generator 5 reaches $P_{\max, 5} = 30.0\text{ MW}$.
+    \item At $D = 288.15\text{ MW}$, Generator 2 reaches $P_{\max, 2} = 80.0\text{ MW}$.
+    \item At $D = 312.00\text{ MW}$, Generator 6 reaches $P_{\max, 6} = 40.0\text{ MW}$.
+    \item At $D = 318.60\text{ MW}$, Generator 1 reaches $P_{\max, 1} = 80.0\text{ MW}$.
+    \item Generator 3 reaches its capacity limit ($P_{\max, 3} = 50.0\text{ MW}$) only at $D = 335.00\text{ MW}$, the total system generation capacity, which lies beyond the sweep's $331.10\text{ MW}$ maximum.
 \end{itemize}
 Whenever a generator reaches $P_{\max}$, it can no longer provide incremental energy. The system-wide incremental cost slope $\left(\sum_{i \notin \mathcal{A}} \frac{1}{2c_i}\right)^{-1}$ increases stepwise, steepening the price trajectory while preserving continuity in $\lambda$.
 
@@ -60,9 +61,9 @@ Figure~\ref{fig:cost_spread} plots total operating cost and LMP spread as the li
 \label{fig:cost_spread}
 \end{figure}
 
-For ratings down to $0.765\times$, the network is completely uncongested; no line flows reach their limits, operating cost remains at $\$565.21\text{/h}$, and LMPs are uniform across all 30 buses ($\lambda = 3.7892\text{ \$/MWh}$). At rating scale $0.760$, line 6--8 becomes the first binding transmission constraint. To prevent line overload, the solver redispatches generation, causing system cost to rise to $\$565.22\text{/h}$ and LMPs to separate ($3.7885$ to $3.8117\text{ \$/MWh}$).
+For ratings down to $0.765\times$, the network is completely uncongested; no line flows reach their limits, operating cost remains at $\$565.21\text{/h}$, and LMPs are uniform across all 30 buses ($\lambda = 3.7892\text{ \$/MWh}$). The first line (6--8) becomes binding at a rating scale of about 0.764 (the sweep is uncongested at 0.765 and congested at 0.760). At rating scale $0.760$, system operating cost is $\$565.22\text{/h}$ and LMPs range from $3.7745$ to $4.0017\text{ \$/MWh}$.
 
-At rating scale $0.750$, two transmission lines bind simultaneously (branches 6--8 and 25--27). System cost increases to $\$565.97\text{/h}$, and the LMP spread widens from $3.6524$ to $7.1828\text{ \$/MWh}$. At rating scale $0.720$, four lines become constrained (branches 6--8, 15--23, 21--22, and 25--27), forcing extensive out-of-merit generation that elevates operating cost to $\$589.58\text{/h}$ and produces an extreme price spread of $3.0185$ to $39.6548\text{ \$/MWh}$.
+At rating scale $0.750$, two transmission lines bind simultaneously (branches 6--8 and 25--27). System cost increases to $\$565.97\text{/h}$, and the LMP spread widens from $3.6524$ to $7.1828\text{ \$/MWh}$. At rating scale $0.720$, four lines become constrained (branches 6--8, 15--23, 21--22, and 25--27), forcing extensive out-of-merit generation that elevates operating cost to $\$589.58\text{/h}$ and produces an extreme price range of $3.0157$ to $39.6485\text{ \$/MWh}$.
 
 \begin{figure}[htbp]
 \centering
@@ -84,4 +85,4 @@ Figure~\ref{fig:convergence} displays the objective function values across itera
 \label{fig:convergence}
 \end{figure}
 
-In accordance with theoretical guarantees for Algorithm~16.3 \cite{nocedal2006}, the objective value decreases strictly monotonically at every iteration across all test scenarios. The uncongested base case converges in 13 iterations, the congested case ($0.75\times$) converges in 14 iterations after incorporating binding transmission constraints into the active set, and the ED case converges in 11 iterations. In each case, once the optimal active constraint manifold is identified, the subproblem step $p_k$ drops to zero, and dual multiplier non-negativity certifies optimality.
+In accordance with theoretical guarantees for Algorithm~16.3 \cite{nocedal2006}, the objective is non-increasing; the flat steps are iterations where a constraint with a negative multiplier is dropped from the working set without moving $x$, and every other iteration strictly decreases the objective. The uncongested base case converges in 13 iterations, the congested case ($0.75\times$) converges in 14 iterations after incorporating binding transmission constraints into the active set, and the ED case converges in 11 iterations. In each case, once the optimal active constraint manifold is identified, the subproblem step $p_k$ drops to zero, and dual multiplier non-negativity certifies optimality.

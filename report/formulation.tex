@@ -92,7 +92,7 @@ Each row of the branch-bus incidence matrix $C$ contains exactly one $+1$ and on
 \begin{equation}
     B_{\text{bus}} \mathbf{1} = C^T \operatorname{diag}(1/x) C \mathbf{1} = 0
 \end{equation}
-For any connected network, the nullspace of $B_{\text{bus}}$ is exactly $\operatorname{span}(\mathbf{1})$, meaning $B_{\text{bus}}$ has rank $n_{\text{bus}} - 1 = 29$. Without an angular reference, the nodal balance equations (\ref{eq:dcopf_balance}) are invariant under an arbitrary global shift $\theta \leftarrow \theta + \phi \mathbf{1}$. Fixing the reference angle $\theta_{\text{ref}} = \theta_1 = 0$ removes this degree of freedom and establishes full column rank for the equality constraint matrix $A_{\text{eq}}$.
+For any connected network, the nullspace of $B_{\text{bus}}$ is exactly $\operatorname{span}(\mathbf{1})$, meaning $B_{\text{bus}}$ has rank $n_{\text{bus}} - 1 = 29$. Without an angular reference, the nodal balance equations (\ref{eq:dcopf_balance}) are invariant under an arbitrary global shift $\theta \leftarrow \theta + \phi \mathbf{1}$. Fixing the reference angle $\theta_{\text{ref}} = \theta_1 = 0$ removes this degree of freedom and makes the 31 rows of $A_{\text{eq}}$ linearly independent (full row rank).
 
 \subsection{KKT Multipliers and Locational Marginal Prices}
 Under our project's Lagrangian definition:
@@ -109,7 +109,7 @@ By the sensitivity theorem of convex programming \cite{boyd2004}, the vector of 
 \begin{equation}
     \lambda_k = \frac{\partial q^*}{\partial b_{\text{eq}, k}}
 \end{equation}
-Because the first 30 equality rows correspond to bus real power balance $b_{\text{eq}, k} = d_k$, multiplier $\lambda_k$ ($k=1,\dots,30$) is the exact marginal cost of supplying an incremental megawatt of load at bus $k$---the Locational Marginal Price ($\lambda_k > 0$). Row 31 corresponds to $\theta_1 = 0$, whose multiplier $\lambda_{31} \approx 0$ enforces the reference angle and carries no price interpretation.
+Because the first 30 equality rows correspond to bus real power balance $b_{\text{eq}, k} = d_k$, multiplier $\lambda_k$ ($k=1,\dots,30$) is the exact marginal cost of supplying an incremental megawatt of load at bus $k$---the Locational Marginal Price (the LMPs are positive in all our test cases). Row 31 corresponds to $\theta_1 = 0$, whose multiplier $\lambda_{31} \approx 0$ enforces the reference angle and carries no price interpretation.
 
 \subsection{Worked Base-Case Check: Equal Marginal Costs}
 When the transmission network is uncongested (base case with $\text{rate\_scale} = 1.0$), no transmission constraints or generator bounds are active ($\mu = 0$). Differentiating the Lagrangian with respect to generator output $P_i$ located at bus $k$ yields:
@@ -118,11 +118,11 @@ When the transmission network is uncongested (base case with $\text{rate\_scale}
 \end{equation}
 Evaluating this marginal cost check at the optimal base-case dispatch from our solver:
 \begin{itemize}
-    \item Generator 1 ($P_1 = 44.73\text{ MW}$): $\text{MC}_1 = 2.000 + 2(0.02000)(44.73) = 3.7892\text{ \$/MWh}$
-    \item Generator 2 ($P_2 = 58.26\text{ MW}$): $\text{MC}_2 = 1.750 + 2(0.01750)(58.26) = 3.7892\text{ \$/MWh}$
-    \item Generator 3 ($P_3 = 22.31\text{ MW}$): $\text{MC}_3 = 1.000 + 2(0.06250)(22.31) = 3.7892\text{ \$/MWh}$
-    \item Generator 4 ($P_4 = 32.33\text{ MW}$): $\text{MC}_4 = 3.250 + 2(0.00834)(32.33) = 3.7892\text{ \$/MWh}$
-    \item Generator 5 ($P_5 = 15.78\text{ MW}$): $\text{MC}_5 = 3.000 + 2(0.02500)(15.78) = 3.7892\text{ \$/MWh}$
-    \item Generator 6 ($P_6 = 15.78\text{ MW}$): $\text{MC}_6 = 3.000 + 2(0.02500)(15.78) = 3.7892\text{ \$/MWh}$
+    \item Generator 1 ($P_1 = 44.7299\text{ MW}$): $\text{MC}_1 = 2.000 + 2(0.02000)(44.7299) = 3.7892\text{ \$/MWh}$
+    \item Generator 2 ($P_2 = 58.2628\text{ MW}$): $\text{MC}_2 = 1.750 + 2(0.01750)(58.2628) = 3.7892\text{ \$/MWh}$
+    \item Generator 3 ($P_3 = 22.3136\text{ MW}$): $\text{MC}_3 = 1.000 + 2(0.06250)(22.3136) = 3.7892\text{ \$/MWh}$
+    \item Generator 4 ($P_4 = 32.3259\text{ MW}$): $\text{MC}_4 = 3.250 + 2(0.00834)(32.3259) = 3.7892\text{ \$/MWh}$
+    \item Generator 5 ($P_5 = 15.7839\text{ MW}$): $\text{MC}_5 = 3.000 + 2(0.02500)(15.7839) = 3.7892\text{ \$/MWh}$
+    \item Generator 6 ($P_6 = 15.7839\text{ MW}$): $\text{MC}_6 = 3.000 + 2(0.02500)(15.7839) = 3.7892\text{ \$/MWh}$
 \end{itemize}
 All six generators operate at an identical marginal cost of $3.7892\text{ \$/MWh}$, precisely matching the system LMP across all 30 buses.

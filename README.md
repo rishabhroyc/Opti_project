@@ -20,7 +20,7 @@ The key result: Lagrange multipliers of the balance constraints are
 electricity prices (Locational Marginal Prices), equal everywhere until
 lines congest, then they split apart.
 
-**Data source:** The IEEE 30-bus test case (`data/case30.m`) is adapted from the MATPOWER distribution \cite{zimmerman2011}.
+**Data source:** The IEEE 30-bus test case (`data/case30.m`) is adapted from the MATPOWER distribution (R. D. Zimmerman et al., MATPOWER, IEEE Trans. Power Systems, 2011).
 
 ## Requirements
 
