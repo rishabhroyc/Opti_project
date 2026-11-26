@@ -69,7 +69,30 @@ def run() -> None:
 
     # ----- Validation rows -----
     val_rows: list[dict[str, Any]] = []
+
+    # Compute non-optimal feasible starts for Figure 4 and iteration counts
+    from scipy.optimize import linprog
+    as_solve_fn = _try_import("opf.active_set")
+    non_opt_iters: dict[str, int] = {}
     history_data: dict[str, list[float]] = {}
+
+    all_cases = [("base", scenarios[0][1]), ("rate_0.75", scenarios[1][1]), ("ed_base", ed_qp)]
+    if as_solve_fn is not None:
+        for label, qp in all_cases:
+            lp_res = linprog(
+                c=-qp.g,
+                A_ub=qp.A_in,
+                b_ub=qp.b_in,
+                A_eq=qp.A_eq,
+                b_eq=qp.b_eq,
+                bounds=(None, None),
+                method="highs",
+            )
+            if lp_res.success:
+                res_non_opt = as_solve_fn(qp, x0=lp_res.x)
+                if res_non_opt.status == "optimal":
+                    history_data[label] = res_non_opt.history
+                    non_opt_iters[label] = res_non_opt.iters
 
     for solver_name, mod_path, is_ed_only in _SOLVERS:
         solve_fn = _try_import(mod_path)
@@ -89,6 +112,7 @@ def run() -> None:
                 continue
 
             result = solve_fn(qp)
+            it_no = non_opt_iters.get(label, "---") if solver_name == "active_set" else "---"
             if result.status != "optimal":
                 val_rows.append({
                     "solver": solver_name,
@@ -98,6 +122,7 @@ def run() -> None:
                     "max_dlam": float("nan"),
                     "kkt_res": float("nan"),
                     "iters": result.iters,
+                    "iters_nonopt": it_no,
                     "status": result.status,
                 })
                 continue
@@ -124,22 +149,19 @@ def run() -> None:
                 "max_dlam": max_dlam,
                 "kkt_res": kkt,
                 "iters": result.iters,
+                "iters_nonopt": it_no,
                 "status": result.status,
             })
 
-            # Save iteration history for active-set solver
-            if solver_name == "active_set" and len(result.history) > 0:
-                history_data[label] = result.history
-
             print(f"  {solver_name:15s} {label:12s}  cost={result.obj:.4f}"
                   f"  Δx={max_dx:.2e}  Δλ={max_dlam:.2e}  KKT={kkt:.2e}"
-                  f"  iters={result.iters}")
+                  f"  iters={result.iters} (non-opt iters={it_no})")
 
     # ----- Write validation.csv -----
     csv_path = RESULTS / "validation.csv"
     with open(csv_path, "w", newline="") as f:
         fieldnames = ["solver", "scenario", "cost", "max_dx", "max_dlam",
-                       "kkt_res", "iters", "status"]
+                       "kkt_res", "iters", "iters_nonopt", "status"]
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(val_rows)
@@ -151,7 +173,7 @@ def run() -> None:
     print(f"Saved {tex_path}")
 
     # ----- +1 MW sensitivity check -----
-    _plus1mw_check(case, ref_solve)
+    _plus1mw_check(case)
 
     # ----- Active-set history JSON -----
     json_path = RESULTS / "active_set_history.json"
@@ -163,10 +185,10 @@ def run() -> None:
 def _write_validation_tex(rows: list[dict[str, Any]], path: Path) -> None:
     """Write a LaTeX booktabs tabular for the validation table."""
     lines = [
-        r"\begin{tabular}{llrrrrr}",
+        r"\begin{tabular}{llrrrrrr}",
         r"\toprule",
         r"Solver & Scenario & Cost (\$/h) & $\max|\Delta x|$ & "
-        r"$\max|\Delta\lambda|$ & KKT res. & Iters \\",
+        r"$\max|\Delta\lambda|$ & KKT res. & Iters & Iters (non-opt) \\",
         r"\midrule",
     ]
     for r in rows:
@@ -176,19 +198,21 @@ def _write_validation_tex(rows: list[dict[str, Any]], path: Path) -> None:
         kkt_s = f"{r['kkt_res']:.2e}" if np.isfinite(r["kkt_res"]) else "---"
         solver_tex = r["solver"].replace("_", r"\_")
         scenario_tex = r["scenario"].replace("_", r"\_")
+        it_no_s = str(r.get("iters_nonopt", "---"))
         lines.append(
             f"{solver_tex} & {scenario_tex} & {cost_s} & {dx_s} & "
-            f"{dl_s} & {kkt_s} & {r['iters']} \\\\"
+            f"{dl_s} & {kkt_s} & {r['iters']} & {it_no_s} \\\\"
         )
     lines += [r"\bottomrule", r"\end{tabular}"]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _plus1mw_check(case, ref_solve) -> None:
+def _plus1mw_check(case) -> None:
     """Add +1 MW at buses 8 and 30, compare Δcost to LMP."""
+    from experiments.common import solve as as_solve
     csv_path = RESULTS / "plus1mw.csv"
     qp_base = build_dcopf(case, rate_scale=1.0)
-    res_base = ref_solve(qp_base)
+    res_base = as_solve(qp_base)
     if res_base.status != "optimal":
         print("  SKIP +1MW check: base case not optimal")
         return
@@ -201,7 +225,7 @@ def _plus1mw_check(case, ref_solve) -> None:
             b_eq=qp_base.b_eq.copy(),
         )
         qp_pert.b_eq[idx] += 1.0
-        res_pert = ref_solve(qp_pert)
+        res_pert = as_solve(qp_pert)
         if res_pert.status != "optimal":
             print(f"  SKIP +1MW at bus {bus}: perturbed case not optimal")
             continue

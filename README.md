@@ -11,48 +11,58 @@
 ## Description
 
 We find the cheapest way to dispatch generators on the IEEE 30-bus
-power system (6 generators, 41 lines, 189.2 MW demand).  **Economic
+power system (6 generators, 41 lines, 189.2 MW demand). **Economic
 Dispatch (ED)** ignores the network; **DC Optimal Power Flow (DC-OPF)**
-adds line-flow constraints.  Both are convex quadratic programs solved
-with our own active-set solver (NumPy only) and validated against a
-CVXPY + Clarabel reference.  The key result: Lagrange multipliers of
-the balance constraints are electricity prices (Locational Marginal
-Prices), equal everywhere until lines congest, then they split apart.
+adds line-flow constraints. Both are convex quadratic programs solved
+with our own active-set solver (pure NumPy iterations) in all experiments;
+the CVXPY + Clarabel reference solver is used only for validation.
+The key result: Lagrange multipliers of the balance constraints are
+electricity prices (Locational Marginal Prices), equal everywhere until
+lines congest, then they split apart.
 
-## Libraries
+**Data source:** The IEEE 30-bus test case (`data/case30.m`) is adapted from the MATPOWER distribution \cite{zimmerman2011}.
+
+## Requirements
+
+Python 3.12 or newer is required.
 
 | Package | Version | Purpose |
 |---|---|---|
-| numpy | ≥ 1.24 | Core numerics |
-| scipy | ≥ 1.10 | `linprog` for feasible-start only |
-| cvxpy | ≥ 1.4 | Reference solver (Clarabel backend) |
-| matplotlib | ≥ 3.7 | Figures |
-| pandas | ≥ 2.0 | CSV reading in plots |
-| pytest | ≥ 7.0 | Tests |
+| numpy | == 2.5.5 | Core numerics |
+| scipy | == 1.18.1 | `linprog` for feasible-start only |
+| cvxpy | == 1.9.3 | Reference solver (Clarabel backend) for validation |
+| matplotlib | == 3.11.2 | Figure generation |
+| pandas | == 3.1.1 | CSV data handling and table processing |
+| pytest | == 9.2.0 | Test suite |
 
-<!-- Rishabh: edit the setup section below when finalizing requirements -->
 ## Setup
+
+All commands should be executed from the repository root.
 
 ```bash
 # Create and activate a virtual environment (recommended)
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
+
+# Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+
 # Linux / macOS:
 source .venv/bin/activate
 
-# Install dependencies
+# Install exact pinned dependencies
 pip install -r requirements.txt
 ```
 
 ## How to Run
 
-```bash
-# Run all experiments and generate results + figures
-python run_all.py
+All commands are run from the repository root:
 
-# Run tests
+```bash
+# Run tests (runs cleanly via pytest.ini)
 pytest
+
+# Run all experiments and regenerate results + figures
+python run_all.py
 
 # Individual experiments
 python -m experiments.congestion
@@ -69,6 +79,7 @@ All outputs are saved to `results/`.
 data/case30.m               IEEE 30-bus test case (MATPOWER format)
 src/opf/qp.py               Shared QP interface (QP, QPResult)
 src/opf/models.py            Case loading, build_ed(), build_dcopf()
+src/opf/check.py             KKT residual and feasibility verification
 src/opf/reference.py         CVXPY + Clarabel reference solver
 src/opf/active_set.py        Primal active-set QP solver
 src/opf/lambda_iteration.py  Lambda-iteration ED solver

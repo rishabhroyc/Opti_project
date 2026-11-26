@@ -7,6 +7,7 @@ Solves convex quadratic programs with cp.CLARABEL.
 """
 
 from typing import Any
+import warnings
 import cvxpy as cp
 import numpy as np
 
@@ -80,6 +81,9 @@ def solve(
     # Map CVXPY status to interface status ("optimal" | "infeasible" | "max_iter" | "singular")
     if prob.status == cp.OPTIMAL:
         status = "optimal"
+    elif prob.status == cp.OPTIMAL_INACCURATE:
+        warnings.warn("CVXPY reported OPTIMAL_INACCURATE: solution may be inaccurate.", UserWarning)
+        status = "optimal"
     elif prob.status in (cp.INFEASIBLE, cp.INFEASIBLE_INACCURATE):
         status = "infeasible"
     elif prob.status in (cp.UNBOUNDED, cp.UNBOUNDED_INACCURATE):
@@ -89,7 +93,8 @@ def solve(
     elif prob.status == cp.SOLVER_ERROR:
         status = "singular"
     else:
-        raise ValueError(f"Unexpected CVXPY status '{prob.status}' could not be mapped cleanly")
+        warnings.warn(f"Unknown CVXPY status '{prob.status}', mapping to singular.", UserWarning)
+        status = "singular"
 
     iters = 0
     if prob.solver_stats is not None and prob.solver_stats.num_iters is not None:

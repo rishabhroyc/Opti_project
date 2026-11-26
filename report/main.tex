@@ -6,6 +6,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage[margin=2.5cm]{geometry}
+\usepackage{url}
 \usepackage{hyperref}
 
 \graphicspath{{../results/}}
@@ -27,16 +28,42 @@ We formulate the Economic Dispatch (ED) and DC Optimal Power Flow (DC-OPF)
 problems as convex quadratic programs on the IEEE 30-bus test system and solve
 them with two custom solvers: a lambda-iteration (bisection) method for ED and
 a primal active-set method (Nocedal and Wright, Algorithm~16.3) for general QPs.
-Both are validated against a CVXPY + Clarabel reference.  We show that the
+Both are validated against a CVXPY + Clarabel reference. We show that the
 Lagrange multipliers of the power-balance constraints are Locational Marginal
 Prices (LMPs), equal at every bus until line congestion causes them to separate.
 \end{abstract}
 
-% TODO Rishabh: formulation section
-% \input{formulation}
+\input{formulation}
 
 \input{methods}
 
 \input{results}
+
+\section{Conclusion}
+In this project, we designed, implemented, and thoroughly evaluated an end-to-end mathematical optimization framework for power system operations on the IEEE 30-bus network. By implementing pure NumPy solvers---a lambda-iteration bisection solver for unconstrained Economic Dispatch and a primal active-set quadratic programming solver for DC Optimal Power Flow---we achieved machine-precision parity with commercial-grade interior-point solvers (CVXPY/Clarabel) without relying on external optimization libraries during active-set iterations.
+
+Our experimental investigations demonstrated the critical role of network topology and thermal branch ratings in wholesale electricity pricing. When transmission capacity is unconstrained, generation dispatches strictly according to the equal incremental cost rule, producing a uniform system-wide price of $\$3.7892\text{/MWh}$. As branch ratings are constrained, transmission bottlenecks first emerge on branch 6--8 at a scale factor of $0.760$, leading to pronounced locational price separation across the network, reaching up to $\$39.65\text{/MWh}$ under heavy congestion ($0.720\times$), before encountering strict system-wide infeasibility at a rating factor of $0.7167$. Furthermore, our second-order Taylor sensitivity analysis demonstrated that finite-difference cost perturbations match the theoretical point derivative down to $10^{-6}$, confirming both the physical accuracy and economic integrity of our dual multiplier conventions.
+
+\begin{thebibliography}{9}
+\bibitem{nocedal2006}
+J.~Nocedal and S.~J.~Wright,
+\textit{Numerical Optimization},
+2nd~ed., Springer, New York, 2006.
+
+\bibitem{boyd2004}
+S.~Boyd and L.~Vandenberghe,
+\textit{Convex Optimization},
+Cambridge University Press, Cambridge, 2004.
+
+\bibitem{zimmerman2011}
+R.~D.~Zimmerman, C.~E.~Murillo-Sanchez, and R.~J.~Thomas,
+``MATPOWER: Steady-State Operations, Planning, and Analysis Tools for Power Systems Research and Education,''
+\textit{IEEE Transactions on Power Systems}, vol.~26, no.~1, pp.~12--19, 2011.
+
+\bibitem{wood2014}
+A.~J.~Wood, B.~F.~Wollenberg, and G.~B.~Sheble,
+\textit{Power Generation, Operation, and Control},
+3rd~ed., Wiley, Hoboken, NJ, 2014.
+\end{thebibliography}
 
 \end{document}

@@ -17,6 +17,7 @@ from experiments.common import (
     solve,
     branch_ends,
     binding_lines,
+    binding_lines_from_flows,
 )
 
 
@@ -43,7 +44,7 @@ def run() -> Path:
 
         if result.status == "optimal":
             lam = result.lam[:n_bus]
-            bl = binding_lines(result.mu)
+            bl = binding_lines_from_flows(qp, result.x)
             bl_str = ";".join(f"{ends[i][0]}-{ends[i][1]}" for i in bl)
             row = [
                 f"{s:.3f}",

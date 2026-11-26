@@ -41,10 +41,29 @@ def fig1_price_vs_demand() -> None:
     df["lambda"] = df["lambda"].astype(float)
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(df["demand_mw"], df["lambda"], "o-", markersize=3, linewidth=1.2)
+    ax.plot(df["demand_mw"], df["lambda"], "o-", markersize=3, linewidth=1.2, label="Marginal Price λ")
+
+    # Mark the kinks where generators reach their P_max
+    from experiments.common import get_case
+    case = get_case()
+    for i, pmax in enumerate(case.p_max):
+        col = f"P{i+1}"
+        if col in df.columns:
+            hit = df[df[col].astype(float) >= pmax - 1e-6]
+            if not hit.empty:
+                d_val = float(hit.iloc[0]["demand_mw"])
+                ax.axvline(
+                    d_val,
+                    linestyle=":",
+                    color="gray",
+                    alpha=0.7,
+                    label=f"G{i+1} at max",
+                )
+
     ax.set_xlabel("Total Demand (MW)")
     ax.set_ylabel("System Marginal Price λ ($/MWh)")
     ax.set_title("Figure 1: ED Price vs Demand")
+    ax.legend()
     ax.grid(True, alpha=0.3)
     _savefig(fig, "fig1_price_vs_demand.png")
 
@@ -137,13 +156,20 @@ def fig4_active_set_history() -> None:
         print("  SKIP fig4: no history data recorded")
         return
 
+    label_map = {
+        "base": "base case",
+        "rate_0.75": "ratings x0.75",
+        "ed_base": "ED",
+    }
+
     fig, ax = plt.subplots(figsize=(8, 5))
-    for label, hist in data.items():
-        ax.plot(range(1, len(hist) + 1), hist, "o-", markersize=4, label=label)
+    for key, hist in data.items():
+        lbl = label_map.get(key, key)
+        ax.plot(range(1, len(hist) + 1), hist, "o-", markersize=4, label=lbl)
 
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Objective Value ($/h)")
-    ax.set_title("Figure 4: Active-Set Solver Convergence")
+    ax.set_title("Figure 4: Active-Set Solver Convergence from High-Cost Feasible Start")
     ax.legend()
     ax.grid(True, alpha=0.3)
     _savefig(fig, "fig4_active_set_history.png")

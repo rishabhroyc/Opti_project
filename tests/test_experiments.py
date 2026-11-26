@@ -15,7 +15,14 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from experiments.common import branch_ends, binding_lines, kkt_residual, get_case
+from experiments.common import (
+    branch_ends,
+    binding_lines,
+    binding_lines_from_flows,
+    kkt_residual,
+    get_case,
+    build_dcopf,
+)
 from src.opf.qp import QP, QPResult
 
 
@@ -75,6 +82,60 @@ class TestBindingLines:
 
         mu[10] = 1e-5  # above tol
         assert binding_lines(mu) == [10]
+
+
+class TestBindingLinesFromFlows:
+    """Tests for binding_lines_from_flows()."""
+
+    def test_no_binding_all_zero(self) -> None:
+        case = get_case()
+        qp = build_dcopf(case)
+        x = np.zeros(qp.H.shape[0])
+        assert binding_lines_from_flows(qp, x) == []
+
+    def test_synthetic_flow_at_rating(self) -> None:
+        n_vars = 36
+        A_in = np.zeros((94, n_vars))
+        b_in = np.ones(94) * 10.0
+        A_in[0, 0] = 1.0
+        A_in[5, 1] = 1.0
+
+        x = np.zeros(n_vars)
+        x[0] = 10.0
+        x[1] = -10.0
+
+        qp = QP(
+            H=np.eye(n_vars),
+            g=np.zeros(n_vars),
+            A_eq=np.zeros((0, n_vars)),
+            b_eq=np.zeros(0),
+            A_in=A_in,
+            b_in=b_in,
+            names=[f"x{i}" for i in range(n_vars)],
+        )
+        assert binding_lines_from_flows(qp, x) == [0, 5]
+
+    def test_flow_tolerance(self) -> None:
+        n_vars = 36
+        A_in = np.zeros((94, n_vars))
+        b_in = np.ones(94) * 10.0
+        A_in[2, 0] = 1.0
+
+        qp = QP(
+            H=np.eye(n_vars),
+            g=np.zeros(n_vars),
+            A_eq=np.zeros((0, n_vars)),
+            b_eq=np.zeros(0),
+            A_in=A_in,
+            b_in=b_in,
+            names=[f"x{i}" for i in range(n_vars)],
+        )
+        x = np.zeros(n_vars)
+        x[0] = 10.0 - 1e-4
+        assert binding_lines_from_flows(qp, x, tol=1e-6) == []
+
+        x[0] = 10.0 - 1e-7
+        assert binding_lines_from_flows(qp, x, tol=1e-6) == [2]
 
 
 class TestKKTResidual:

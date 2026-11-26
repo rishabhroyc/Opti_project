@@ -32,20 +32,21 @@ from opf.qp import QP, QPResult  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Solver swap-point.
-# On Friday this becomes:  from opf.active_set import solve
+# The experiments use our primal active-set QP solver. The reference
+# solver (CVXPY) is used only for external validation.
 #
 # The import is wrapped in a function so that tests which don't call
-# ``solve`` can still import the other helpers without cvxpy installed.
+# ``solve`` can still import the other helpers without loading the solver.
 # ---------------------------------------------------------------------------
 _solve_fn = None
 
 
 def solve(qp: QP, **kwargs) -> QPResult:
-    """Solve a QP using the currently-selected solver."""
+    """Solve a QP using our active-set solver."""
     global _solve_fn
     if _solve_fn is None:
-        from opf.reference import solve as _ref_solve  # noqa: E402
-        _solve_fn = _ref_solve
+        from opf.active_set import solve as _as_solve  # noqa: E402
+        _solve_fn = _as_solve
     return _solve_fn(qp, **kwargs)
 
 
@@ -99,6 +100,31 @@ def binding_lines(mu: np.ndarray, tol: float = 1e-6) -> list[int]:
     for i in range(n_branch):
         if upper[i] > tol or lower[i] > tol:
             active.add(i)
+    return sorted(active)
+
+
+def binding_lines_from_flows(qp: QP, x: np.ndarray, tol: float = 1e-6) -> list[int]:
+    """Return 0-based indices of lines whose flow is at its rating.
+
+    Checks the first 41 rows of A_in (the line upper rows):
+        |A_in[i] @ x| >= b_in[i] - tol * max(1.0, b_in[i])
+
+    Args:
+        qp: The DC-OPF QP problem.
+        x: Solution primal vector.
+        tol: Relative/absolute tolerance threshold.
+
+    Returns:
+        Sorted list of 0-based line indices that are binding.
+    """
+    n_branch = 41
+    active = []
+    for i in range(n_branch):
+        flow = float(np.abs(qp.A_in[i] @ x))
+        limit = float(qp.b_in[i])
+        threshold = limit - tol * max(1.0, limit)
+        if flow >= threshold:
+            active.append(i)
     return sorted(active)
 
 

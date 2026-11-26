@@ -1,0 +1,128 @@
+\section{Problem Statement and Mathematical Formulation}
+\label{sec:formulation}
+
+\subsection{Motivation and Overview}
+In modern wholesale electricity markets, the system transmission operator must schedule generator outputs to satisfy aggregate consumer demand at the lowest possible operating cost, subject to technical constraints on generator capacities and network power flows. When transmission lines have ample thermal capacity, economic efficiency dictates that all generators operate at equal incremental cost---a problem known as Economic Dispatch (ED) \cite{wood2014}. However, in physical transmission grids, line flow ratings frequently constrain the transfer of low-cost generation to load centers. This requires the operator to solve the DC Optimal Power Flow (DC-OPF) problem, redispatching more expensive local units to prevent line overloads \cite{wood2014, zimmerman2011}.
+
+Crucially, the dual Lagrange multipliers associated with the bus real power balance equations correspond to Locational Marginal Prices (LMPs) \cite{boyd2004}. When lines are uncongested, LMPs are uniform across the entire grid. Under transmission congestion, LMPs separate across buses, reflecting the local marginal cost of supplying an incremental megawatt of power while respecting transmission boundaries.
+
+\subsection{System Data and Notation}
+We evaluate both formulations on the standard IEEE 30-bus test system from MATPOWER \cite{zimmerman2011}, consisting of 30 buses, 6 generating units, and 41 transmission branches, with an aggregate active load of $D = 189.20\text{ MW}$ and base power $S_{\text{base}} = 100\text{ MVA}$. Table~\ref{tab:notation} summarizes the mathematical notation, and Table~\ref{tab:generator_data} lists the technical parameters and quadratic cost coefficients for all six generators parsed from \texttt{data/case30.m}.
+
+\begin{table}[htbp]
+\centering
+\caption{Mathematical notation for ED and DC-OPF.}
+\label{tab:notation}
+\begin{tabular}{ll}
+\toprule
+Symbol & Description \\
+\midrule
+$n_{\text{bus}}, n_{\text{gen}}, n_{\text{branch}}$ & Number of buses (30), generators (6), and branches (41) \\
+$S_{\text{base}}$ & System base power (100.0 MVA) \\
+$P_i$ & Active power output of generator $i$ (MW) \\
+$\theta_k$ & Voltage phase angle at bus $k$ (radians) \\
+$d_k$ & Real power demand at bus $k$ (MW) \\
+$b_i, c_i$ & Linear (\$/MWh) and quadratic (\$/MW$^2$h) generator cost coefficients \\
+$P_{\min, i}, P_{\max, i}$ & Minimum and maximum generation limits (MW) \\
+$x_l$ & Series reactance of branch $l$ (per unit) \\
+$F_{\max, l}$ & Long-term rating (RATE\_A) of branch $l$ (MW/MVA) \\
+$C_g \in \mathbb{R}^{30 \times 6}$ & Generator-to-bus incidence matrix \\
+$C \in \mathbb{R}^{41 \times 30}$ & Branch-to-bus incidence matrix ($+1$ at from-bus, $-1$ at to-bus) \\
+$B_{\text{bus}} \in \mathbb{R}^{30 \times 30}$ & Bus susceptance matrix, $B_{\text{bus}} = C^T \operatorname{diag}(1/x) C$ \\
+$\lambda \in \mathbb{R}^{31}$ & Dual multipliers for equality constraints (LMPs and reference row) \\
+$\mu \in \mathbb{R}^{94}$ & Dual multipliers for inequality constraints (lines and generators) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Generator cost coefficients, operational limits, and bus locations (IEEE 30-bus system).}
+\label{tab:generator_data}
+\begin{tabular}{crrrrr}
+\toprule
+Generator $i$ & Bus & $P_{\min, i}$ (MW) & $P_{\max, i}$ (MW) & $b_i$ (\$/MWh) & $c_i$ (\$/MW$^2$h) \\
+\midrule
+1 & 1  & 0.0 & 80.0 & 2.000 & 0.02000 \\
+2 & 2  & 0.0 & 80.0 & 1.750 & 0.01750 \\
+3 & 22 & 0.0 & 50.0 & 1.000 & 0.06250 \\
+4 & 27 & 0.0 & 55.0 & 3.250 & 0.00834 \\
+5 & 23 & 0.0 & 30.0 & 3.000 & 0.02500 \\
+6 & 13 & 0.0 & 40.0 & 3.000 & 0.02500 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Economic Dispatch Formulation}
+The Economic Dispatch problem ignores network transmission constraints and minimizes the total quadratic operating cost subject only to system-wide power balance and individual generator capacity limits:
+\begin{align}
+    \min_{P \in \mathbb{R}^6} \quad & \sum_{i=1}^{n_{\text{gen}}} \left( b_i P_i + c_i P_i^2 \right) \label{eq:ed_obj} \\
+    \text{subject to} \quad & \sum_{i=1}^{n_{\text{gen}}} P_i = \sum_{k=1}^{n_{\text{bus}}} d_k \cdot \text{load\_scale} \label{eq:ed_balance} \\
+    & P_i \le P_{\max, i}, \quad \forall i \in \{1, \dots, n_{\text{gen}}\} \label{eq:ed_pmax} \\
+    & -P_i \le -P_{\min, i}, \quad \forall i \in \{1, \dots, n_{\text{gen}}\} \label{eq:ed_pmin}
+\end{align}
+In the canonical QP format of \texttt{src/opf/models.py}, the ED problem has $n = 6$ primal variables, $m_{\text{eq}} = 1$ equality constraint ($A_{\text{eq}} = \mathbf{1}_{1 \times 6}$), and $m_{\text{in}} = 12$ inequality constraints ($A_{\text{in}} = \begin{bmatrix} I_6 \\ -I_6 \end{bmatrix}$).
+
+\subsection{DC Optimal Power Flow Formulation}
+The DC-OPF model incorporates transmission network physics under standard DC power flow assumptions \cite{wood2014}:
+\begin{enumerate}
+    \item Transmission lines are lossless (branch resistance $r \ll x$ is neglected).
+    \item Voltage magnitudes are constant at $1.0\text{ p.u.}$ across all buses.
+    \item Voltage phase angle differences across lines are small ($\sin(\theta_i - \theta_j) \approx \theta_i - \theta_j$).
+    \item Reactive power flows and voltage dependencies are uncoupled from real power flows.
+\end{enumerate}
+
+The primal optimization variable is $x = [P_1, \dots, P_6, \theta_1, \dots, \theta_{30}]^T \in \mathbb{R}^{36}$. The DC-OPF quadratic program is:
+\begin{align}
+    \min_{x \in \mathbb{R}^{36}} \quad & \frac{1}{2} x^T H x + g^T x = \sum_{i=1}^{n_{\text{gen}}} \left( b_i P_i + c_i P_i^2 \right) \label{eq:dcopf_obj} \\
+    \text{subject to} \quad & C_g P - S_{\text{base}} B_{\text{bus}} \theta = d \cdot \text{load\_scale} \quad (30\text{ nodal balance rows}) \label{eq:dcopf_balance} \\
+    & \theta_{\text{ref}} = \theta_1 = 0 \quad (1\text{ reference angle row}) \label{eq:dcopf_ref} \\
+    & +S_{\text{base}} \operatorname{diag}(1/x) C \theta \le F_{\max} \cdot \text{rate\_scale} \quad (41\text{ forward line limits}) \label{eq:dcopf_line_fwd} \\
+    & -S_{\text{base}} \operatorname{diag}(1/x) C \theta \le F_{\max} \cdot \text{rate\_scale} \quad (41\text{ reverse line limits}) \label{eq:dcopf_line_rev} \\
+    & P_i \le P_{\max, i}, \quad \forall i \in \{1, \dots, 6\} \quad (6\text{ gen upper limits}) \label{eq:dcopf_gen_up} \\
+    & -P_i \le -P_{\min, i}, \quad \forall i \in \{1, \dots, 6\} \quad (6\text{ gen lower limits}) \label{eq:dcopf_gen_lo}
+\end{align}
+As implemented in \texttt{build\_dcopf()}, this yields $n = 36$ decision variables, $m_{\text{eq}} = 31$ equality constraints, and $m_{\text{in}} = 94$ inequality constraints ($41 + 41 + 6 + 6 = 94$).
+
+\subsection{Convexity and KKT Optimality Conditions}
+The objective Hessian is $H = \begin{bmatrix} \operatorname{diag}(2c) & 0 \\ 0 & 0_{30 \times 30} \end{bmatrix}$. Because $c_i > 0$ for all generators, $\operatorname{diag}(2c)$ is strictly positive definite on the generation subspace $P$, and zero on $\theta$. Thus $H$ is symmetric positive semidefinite ($H \succeq 0$), ensuring that the quadratic cost function is convex \cite{boyd2004}. Furthermore, all 31 equality constraints and 94 inequality constraints are linear, defining a polyhedral convex feasible set. By convex optimization theory \cite{boyd2004, nocedal2006}, any local solution is a global optimum, and the Karush-Kuhn-Tucker (KKT) conditions are both necessary and sufficient for global optimality.
+
+\subsection{Susceptance Matrix Singularity and Reference Bus}
+Each row of the branch-bus incidence matrix $C$ contains exactly one $+1$ and one $-1$, which implies $C \mathbf{1} = 0$, where $\mathbf{1}$ is the all-ones vector. Consequently:
+\begin{equation}
+    B_{\text{bus}} \mathbf{1} = C^T \operatorname{diag}(1/x) C \mathbf{1} = 0
+\end{equation}
+For any connected network, the nullspace of $B_{\text{bus}}$ is exactly $\operatorname{span}(\mathbf{1})$, meaning $B_{\text{bus}}$ has rank $n_{\text{bus}} - 1 = 29$. Without an angular reference, the nodal balance equations (\ref{eq:dcopf_balance}) are invariant under an arbitrary global shift $\theta \leftarrow \theta + \phi \mathbf{1}$. Fixing the reference angle $\theta_{\text{ref}} = \theta_1 = 0$ removes this degree of freedom and establishes full column rank for the equality constraint matrix $A_{\text{eq}}$.
+
+\subsection{KKT Multipliers and Locational Marginal Prices}
+Under our project's Lagrangian definition:
+\begin{equation}
+    \mathcal{L}(x, \lambda, \mu) = \frac{1}{2} x^T H x + g^T x - \lambda^T (A_{\text{eq}} x - b_{\text{eq}}) + \mu^T (A_{\text{in}} x - b_{\text{in}})
+\end{equation}
+the KKT stationarity condition is:
+\begin{equation}
+    \nabla_x \mathcal{L} = H x + g - A_{\text{eq}}^T \lambda + A_{\text{in}}^T \mu = 0
+\end{equation}
+together with primal feasibility ($A_{\text{eq}} x = b_{\text{eq}}$, $A_{\text{in}} x \le b_{\text{in}}$), dual feasibility ($\mu \ge 0$), and complementary slackness ($\mu_j (a_{\text{in}, j}^T x - b_{\text{in}, j}) = 0$).
+
+By the sensitivity theorem of convex programming \cite{boyd2004}, the vector of equality multipliers $\lambda$ satisfies:
+\begin{equation}
+    \lambda_k = \frac{\partial q^*}{\partial b_{\text{eq}, k}}
+\end{equation}
+Because the first 30 equality rows correspond to bus real power balance $b_{\text{eq}, k} = d_k$, multiplier $\lambda_k$ ($k=1,\dots,30$) is the exact marginal cost of supplying an incremental megawatt of load at bus $k$---the Locational Marginal Price ($\lambda_k > 0$). Row 31 corresponds to $\theta_1 = 0$, whose multiplier $\lambda_{31} \approx 0$ enforces the reference angle and carries no price interpretation.
+
+\subsection{Worked Base-Case Check: Equal Marginal Costs}
+When the transmission network is uncongested (base case with $\text{rate\_scale} = 1.0$), no transmission constraints or generator bounds are active ($\mu = 0$). Differentiating the Lagrangian with respect to generator output $P_i$ located at bus $k$ yields:
+\begin{equation}
+    \frac{\partial \mathcal{L}}{\partial P_i} = b_i + 2 c_i P_i - \lambda_k = 0 \implies \text{MC}_i = b_i + 2 c_i P_i = \lambda_k
+\end{equation}
+Evaluating this marginal cost check at the optimal base-case dispatch from our solver:
+\begin{itemize}
+    \item Generator 1 ($P_1 = 44.73\text{ MW}$): $\text{MC}_1 = 2.000 + 2(0.02000)(44.73) = 3.7892\text{ \$/MWh}$
+    \item Generator 2 ($P_2 = 58.26\text{ MW}$): $\text{MC}_2 = 1.750 + 2(0.01750)(58.26) = 3.7892\text{ \$/MWh}$
+    \item Generator 3 ($P_3 = 22.31\text{ MW}$): $\text{MC}_3 = 1.000 + 2(0.06250)(22.31) = 3.7892\text{ \$/MWh}$
+    \item Generator 4 ($P_4 = 32.33\text{ MW}$): $\text{MC}_4 = 3.250 + 2(0.00834)(32.33) = 3.7892\text{ \$/MWh}$
+    \item Generator 5 ($P_5 = 15.78\text{ MW}$): $\text{MC}_5 = 3.000 + 2(0.02500)(15.78) = 3.7892\text{ \$/MWh}$
+    \item Generator 6 ($P_6 = 15.78\text{ MW}$): $\text{MC}_6 = 3.000 + 2(0.02500)(15.78) = 3.7892\text{ \$/MWh}$
+\end{itemize}
+All six generators operate at an identical marginal cost of $3.7892\text{ \$/MWh}$, precisely matching the system LMP across all 30 buses.

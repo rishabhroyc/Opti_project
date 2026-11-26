@@ -83,7 +83,7 @@ Iteration terminates when the power balance residual satisfies $|P_{\text{total}
 
 \subsection{Primal Active-Set Quadratic Programming Solver}
 
-For problems with general linear inequality constraints (such as line flow ratings in DC-OPF), decoupling is not possible. We implemented the Primal Active-Set Method following Nocedal and Wright (Algorithm 16.3).
+For problems with general linear inequality constraints (such as line flow ratings in DC-OPF), decoupling is not possible. We implemented the Primal Active-Set Method following Nocedal and Wright \cite{nocedal2006} (Algorithm 16.3).
 
 \subsubsection{Standard QP Formulation}
 The general convex QP is expressed as:
@@ -137,7 +137,7 @@ The $-A_{eq}^T$ block ensures that the equality multiplier $\lambda$ matches the
 \subsubsection{Algorithmic Flow (Algorithm 16.3)}
 \begin{enumerate}
     \item \textbf{Initialization and Rank Verification:}
-    Start from a primal feasible point $x_0$ (obtained via \texttt{feasible\_start()}, which uses \texttt{scipy.optimize.linprog} strictly if the unconstrained ED candidate violates line limits). The active-set iterations themselves use only NumPy. Active inequality constraints ($|a_i^T x_0 - b_i| \le \text{tol}$) are added to $\mathcal{W}_0$ one by one \textit{if and only if} they increase the row rank of $\begin{bmatrix} A_{eq} \\ A_{\mathcal{W}} \end{bmatrix}$. This prevents Linear Independence Constraint Qualification (LICQ) breakdown and singularity in system (\ref{eq:kkt_system}).
+    Start from a primal feasible point $x_0$ (obtained via \texttt{feasible\_start()}, which uses \path{scipy.optimize.linprog} strictly if the unconstrained ED candidate violates line limits). The active-set iterations themselves use only NumPy. Active inequality constraints ($|a_i^T x_0 - b_i| \le \text{tol}$) are added to $\mathcal{W}_0$ one by one \textit{if and only if} they increase the row rank of $\begin{bmatrix} A_{eq} \\ A_{\mathcal{W}} \end{bmatrix}$. This prevents Linear Independence Constraint Qualification (LICQ) breakdown and singularity in system (\ref{eq:kkt_system}).
 
     \item \textbf{Step Evaluation ($p_k \approx 0$):}
     If $\|p_k\|_\infty \le \text{tol}$, $x_k$ is the exact minimizer on the current working subspace.

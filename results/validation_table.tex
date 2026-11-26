@@ -1,13 +1,13 @@
-\begin{tabular}{llrrrrr}
+\begin{tabular}{llrrrrrr}
 \toprule
-Solver & Scenario & Cost (\$/h) & $\max|\Delta x|$ & $\max|\Delta\lambda|$ & KKT res. & Iters \\
+Solver & Scenario & Cost (\$/h) & $\max|\Delta x|$ & $\max|\Delta\lambda|$ & KKT res. & Iters & Iters (non-opt) \\
 \midrule
-reference & base & 565.21 & 0.00e+00 & 0.00e+00 & 6.91e-12 & 7 \\
-reference & rate\_0.75 & 565.97 & 0.00e+00 & 0.00e+00 & 7.58e-12 & 9 \\
-reference & ed\_base & 565.21 & 0.00e+00 & 0.00e+00 & 2.82e-12 & 6 \\
-active\_set & base & 565.21 & 4.27e-08 & 8.59e-10 & 9.55e-12 & 1 \\
-active\_set & rate\_0.75 & 565.97 & 9.80e-06 & 8.86e-06 & 9.55e-12 & 9 \\
-active\_set & ed\_base & 565.21 & 8.77e-07 & 4.00e-10 & 0.00e+00 & 1 \\
-lambda\_iter & ed\_base & 565.21 & 8.77e-07 & 4.31e-10 & 0.00e+00 & 33 \\
+reference & base & 565.21 & 0.00e+00 & 0.00e+00 & 8.31e-09 & 7 & --- \\
+reference & rate\_0.75 & 565.97 & 0.00e+00 & 0.00e+00 & 2.06e-07 & 9 & --- \\
+reference & ed\_base & 565.21 & 0.00e+00 & 0.00e+00 & 7.45e-07 & 6 & --- \\
+active\_set & base & 565.21 & 4.27e-08 & 8.59e-10 & 2.40e-11 & 1 & 13 \\
+active\_set & rate\_0.75 & 565.97 & 9.80e-06 & 8.86e-06 & 9.55e-12 & 9 & 14 \\
+active\_set & ed\_base & 565.21 & 8.77e-07 & 4.00e-10 & 2.40e-11 & 1 & 11 \\
+lambda\_iter & ed\_base & 565.21 & 8.77e-07 & 4.31e-10 & 5.07e-09 & 33 & --- \\
 \bottomrule
 \end{tabular}
