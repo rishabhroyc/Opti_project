@@ -27,6 +27,11 @@ sys.path.insert(0, str(_ROOT))
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    # Print UTF-8 (for symbols such as lambda and arrows) even when the output
+    # is redirected to a file on Windows, where the default encoding would fail.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     print("=" * 60)
     print("run_all.py – Albert and Einstein OPF results")
     print("=" * 60)
@@ -50,6 +55,9 @@ def main() -> None:
     print("\n" + "=" * 60)
     print("All results saved to results/")
     print("=" * 60)
+
+    from experiments.summary import run as run_summary
+    run_summary()
 
 
 if __name__ == "__main__":
