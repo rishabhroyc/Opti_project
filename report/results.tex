@@ -1,0 +1,72 @@
+\section{Results and Discussion}
+\label{sec:results}
+
+% TODO: Write prose interpreting the results once all numbers are finalized.
+
+\subsection{Solver Validation}
+
+Table~\ref{tab:validation} compares the three solvers on the base case and
+the congested scenario (ratings $\times 0.75$).
+
+\begin{table}[htbp]
+\centering
+\caption{Solver comparison: cost, primal/dual error vs.\ reference, KKT
+residual, and iteration count.}
+\label{tab:validation}
+\input{../results/validation_table.tex}
+\end{table}
+
+% TODO: Discuss the +1~MW sensitivity check (results in plus1mw.csv).
+
+\subsection{Price vs.\ Demand (Economic Dispatch)}
+
+Figure~\ref{fig:price_demand} shows the system marginal price $\lambda$ as a
+function of total demand.  Kinks occur where generators reach their capacity
+limits and leave the equal-incremental-cost dispatch.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{fig1_price_vs_demand.png}
+\caption{ED marginal price $\lambda$ vs.\ total demand.}
+\label{fig:price_demand}
+\end{figure}
+
+\subsection{Congestion Sweep}
+
+Figure~\ref{fig:cost_spread} plots total cost and LMP spread against the
+line-rating scale factor.  The infeasible region (ratings below approximately
+$0.71\times$) is shaded.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{fig2_cost_spread_vs_rating.png}
+\caption{Cost and LMP spread vs.\ rating scale factor.}
+\label{fig:cost_spread}
+\end{figure}
+
+Figure~\ref{fig:lmp_bus} shows the per-bus LMPs at three rating levels.
+At full ratings all LMPs equal $\lambda \approx 3.79$~\$/MWh; at $0.75\times$
+prices separate (3.65--7.18); at $0.72\times$ the spread widens dramatically
+(3.02--39.65).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{fig3_lmp_per_bus.png}
+\caption{LMP at each bus for rating scales 1.00, 0.75, and 0.72.}
+\label{fig:lmp_bus}
+\end{figure}
+
+\subsection{Active-Set Convergence}
+
+Figure~\ref{fig:convergence} shows the active-set solver's objective value at
+each iteration.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{fig4_active_set_history.png}
+\caption{Active-set solver objective per iteration.}
+\label{fig:convergence}
+\end{figure}
+
+% TODO: Comment on iteration counts, monotone decrease, and comparison
+% between base case and congested case.
