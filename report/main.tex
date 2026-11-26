@@ -1,0 +1,42 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+
+\graphicspath{{../results/}}
+
+\title{Economic Dispatch and DC Optimal Power Flow\\on the IEEE 30-Bus System}
+\author{%
+  Rishabh Roy Choudhury \and
+  Varshith Tadiparthi \and
+  B.~Rithwik\\[4pt]
+  \textit{Team Albert and Einstein}
+}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We formulate the Economic Dispatch (ED) and DC Optimal Power Flow (DC-OPF)
+problems as convex quadratic programs on the IEEE 30-bus test system and solve
+them with two custom solvers: a lambda-iteration (bisection) method for ED and
+a primal active-set method (Nocedal and Wright, Algorithm~16.3) for general QPs.
+Both are validated against a CVXPY + Clarabel reference.  We show that the
+Lagrange multipliers of the power-balance constraints are Locational Marginal
+Prices (LMPs), equal at every bus until line congestion causes them to separate.
+\end{abstract}
+
+% TODO Rishabh: formulation section
+% \input{formulation}
+
+\input{methods}
+
+\input{results}
+
+\end{document}
